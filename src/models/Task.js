@@ -52,6 +52,25 @@ const taskSchema = new mongoose.Schema(
       enum: ['todo', 'in_progress', 'completed'],
       default: 'todo'
     },
+    submissionStatus: {
+      type: String,
+      enum: ['pending', 'submitted', 'late_submitted', 'graded', 'exempted'],
+      default: 'pending'
+    },
+    submissionDate: {
+      type: Date
+    },
+    submissionNotes: {
+      type: String,
+      default: ''
+    },
+    projectDeliverables: {
+      type: [String],
+      default: []
+    },
+    presentationDate: {
+      type: Date
+    },
     submissionLink: {
       type: String,
       default: ''

@@ -1,6 +1,7 @@
 const ExamTimetable = require('../models/ExamTimetable');
 const Task = require('../models/Task');
 const Subject = require('../models/Subject');
+const StudySession = require('../models/StudySession');
 const PlannerService = require('../services/planner.service');
 const ApiError = require('../utils/apiError');
 const ApiResponse = require('../utils/apiResponse');
@@ -16,6 +17,139 @@ const getStudyPlanner = asyncHandler(async (req, res, next) => {
   const schedule = await PlannerService.generateStudyPlan(req.user._id, days);
 
   return ApiResponse.success(res, 'Smart study plan generated successfully', schedule);
+});
+
+/**
+ * @desc    Get personalized study recommendations
+ * @route   GET /api/planner/recommendations
+ * @access  Private (Student)
+ */
+const getRecommendations = asyncHandler(async (req, res, next) => {
+  const recommendations = await PlannerService.getPersonalizedRecommendations(req.user._id);
+  return ApiResponse.success(
+    res,
+    'Personalized study recommendations retrieved',
+    recommendations
+  );
+});
+
+/**
+ * @desc    Create a dedicated study session
+ * @route   POST /api/planner/sessions
+ * @access  Private (Student)
+ */
+const createStudySession = asyncHandler(async (req, res, next) => {
+  const {
+    title,
+    subjectId,
+    subjectCode,
+    scheduledDate,
+    startTime,
+    endTime,
+    durationMinutes,
+    topic,
+    goals,
+    relatedTaskId,
+    isWeakSubjectFocus,
+    priority,
+    notes
+  } = req.body;
+
+  if (!title || !scheduledDate) {
+    return next(ApiError.badRequest('Please provide title and scheduledDate'));
+  }
+
+  const session = await StudySession.create({
+    student: req.user._id,
+    title,
+    subject: subjectId || null,
+    subjectCode: (subjectCode || 'GENERAL').toUpperCase(),
+    scheduledDate: new Date(scheduledDate),
+    startTime: startTime || '18:00',
+    endTime: endTime || '19:00',
+    durationMinutes: durationMinutes || 60,
+    topic: topic || '',
+    goals: goals || [],
+    relatedTask: relatedTaskId || null,
+    isWeakSubjectFocus: Boolean(isWeakSubjectFocus),
+    priority: priority || 'medium',
+    status: 'scheduled',
+    notes: notes || ''
+  });
+
+  return ApiResponse.created(res, 'Study session scheduled successfully', session);
+});
+
+/**
+ * @desc    Get student's study sessions with date/status filter
+ * @route   GET /api/planner/sessions
+ * @access  Private (Student)
+ */
+const getStudySessions = asyncHandler(async (req, res, next) => {
+  const { date, status, subjectCode } = req.query;
+
+  const filter = { student: req.user._id };
+  if (status) filter.status = status;
+  if (subjectCode) filter.subjectCode = subjectCode.toUpperCase();
+  if (date) {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    filter.scheduledDate = { $gte: startOfDay, $lte: endOfDay };
+  }
+
+  const sessions = await StudySession.find(filter)
+    .populate('subject', 'subjectCode name credits')
+    .populate('relatedTask', 'title type dueDate priority')
+    .sort({ scheduledDate: 1, startTime: 1 });
+
+  return ApiResponse.success(res, 'Study sessions retrieved successfully', {
+    count: sessions.length,
+    sessions
+  });
+});
+
+/**
+ * @desc    Update study session details or status
+ * @route   PUT /api/planner/sessions/:id
+ * @access  Private (Student)
+ */
+const updateStudySession = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+  const updates = req.body;
+
+  const session = await StudySession.findOne({ _id: id, student: req.user._id });
+  if (!session) {
+    return next(ApiError.notFound('Study session not found'));
+  }
+
+  if (updates.status === 'completed' && session.status !== 'completed') {
+    session.completedAt = new Date();
+  }
+
+  Object.assign(session, updates);
+  await session.save();
+
+  return ApiResponse.success(res, 'Study session updated successfully', session);
+});
+
+/**
+ * @desc    Delete study session
+ * @route   DELETE /api/planner/sessions/:id
+ * @access  Private (Student)
+ */
+const deleteStudySession = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+
+  const session = await StudySession.findOneAndDelete({ _id: id, student: req.user._id });
+  if (!session) {
+    return next(ApiError.notFound('Study session not found'));
+  }
+
+  return ApiResponse.success(res, 'Study session deleted successfully', {
+    deletedSessionId: id
+  });
 });
 
 /**
@@ -102,10 +236,10 @@ const completeTaskAndRebalance = asyncHandler(async (req, res, next) => {
   }
 
   task.status = 'completed';
+  task.submissionStatus = 'submitted';
   task.completedAt = new Date();
   await task.save();
 
-  // Generate updated plan immediately after task completion
   const refreshedPlan = await PlannerService.generateStudyPlan(req.user._id, 7);
 
   return ApiResponse.success(res, 'Task marked as completed and study schedule rebalanced', {
@@ -116,6 +250,11 @@ const completeTaskAndRebalance = asyncHandler(async (req, res, next) => {
 
 module.exports = {
   getStudyPlanner,
+  getRecommendations,
+  createStudySession,
+  getStudySessions,
+  updateStudySession,
+  deleteStudySession,
   getExamTimetable,
   addExamToTimetable,
   completeTaskAndRebalance

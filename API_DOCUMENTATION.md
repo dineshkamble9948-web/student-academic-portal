@@ -1,116 +1,68 @@
-# Academic Analytics & Mentorship API - Frontend Integration Documentation
+# Academic Analytics, Mentorship & Smart Study Planner - API Documentation
 
 > **Base URL:** `http://localhost:5000/api`  
 > **Format:** Standard JSON (`application/json`)  
-> **CORS:** Enabled for `http://localhost:5173`, `http://localhost:3000`, `http://localhost:4173`, and local network development.
+> **CORS:** Enabled for `http://localhost:5173`, `http://localhost:3000`, `http://localhost:4173`, and local network origin.  
+> **Grading Standard:** Configurable — verified with **IIIT Raichur / IIT Hyderabad 10-point scheme** (`A+`=10, `A`=10, `A-`=9, `B`=8, `B-`=7, `C`=6, `C-`=5, `D`=4, `F`=0, minimum graduation CGPA = 5.0, honors threshold $\ge$ 8.0).
 
 ---
 
-## 1. Global Response Format
+## 1. Global Response Schema
 
-All backend responses follow a uniform JSON schema to simplify frontend Axios/Fetch handling and React Query state management.
+All backend endpoints wrap responses in a standardized JSON envelope:
 
-### Success Response Envelope:
+### Success Envelope (`200 OK` / `201 Created`):
 ```json
 {
   "success": true,
   "statusCode": 200,
   "message": "Human readable confirmation message",
   "data": { ... },
-  "meta": { ... } // (Optional metadata: pagination, totalCount, etc.)
+  "meta": { ... }
 }
 ```
 
-### Error Response Envelope:
+### Error Envelope (`400`, `401`, `403`, `404`, `409`, `500`):
 ```json
 {
   "success": false,
   "statusCode": 400,
-  "message": "Specific error description",
+  "message": "Detailed error description",
   "errors": [
-    { "field": "email", "message": "Please provide a valid email" }
+    { "field": "email", "message": "Email is required" }
   ]
 }
 ```
 
----
-
-## 2. Authentication & Authorization
-
-All protected routes require a Bearer token in the HTTP `Authorization` header:
+### Authentication Header:
+For all protected routes, attach the JWT token received from `/api/auth/login`:
 ```http
-Authorization: Bearer <jwt_token_received_on_login>
+Authorization: Bearer <jwt_token>
 ```
 
-### Roles:
-- `Student`: Regular undergraduate student.
-- `Senior`: Senior undergraduate / mentor (has mentor profile & receives mentorship requests).
-- `Admin`: Faculty / Head of Department (can import bulk academic marks & schedule official exam timetables).
-
 ---
 
-## 3. Pre-Seeded Test Credentials
+## 2. Pre-Seeded Test Credentials
 
-Use these ready-to-test accounts created by `npm run seed`:
-
-| Role | Email | Roll Number | Password | Notes |
+| Role | Email | Roll Number | Password | Profile Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **Student (Regular)** | `aarav.sharma@college.edu` | `21CS001` | `password123` | Sem 5 CSE. Has weak subject in DBMS (`CS501`) & moderate TOC (`CS504`). |
-| **Student (Topper)** | `ananya.iyer@college.edu` | `21CS002` | `password123` | Sem 5 CSE. High scores across all subjects (CGPA > 9.5). |
-| **Student (Average)** | `rohan.verma@college.edu` | `21CS003` | `password123` | Sem 5 CSE. Needs guidance in Operating Systems. |
-| **Senior (Female Mentor)** | `priya.patel@college.edu` | `20CS055` | `password123` | Expert in DBMS (`CS501`). Available, CGPA 9.35. |
-| **Senior (Male Mentor)** | `vikram.rao@college.edu` | `20CS088` | `password123` | Expert in OS (`CS502`). Available, CGPA 8.85. |
-| **Senior (At Capacity)** | `sneha.mukherjee@college.edu`| `20CS091` | `password123` | Currently unavailable / full capacity (2/2 mentees). |
-| **Admin / HOD** | `hod.cse@college.edu` | `ADMIN001` | `password123` | Can import marks, post exam timetable. |
+| **Student (Regular)** | `aarav.sharma@college.edu` | `21CS001` | `password123` | Sem 5 CSE. Weak subject in DBMS (`CS501`), moderate in TOC (`CS504`). |
+| **Student (Topper)** | `ananya.iyer@college.edu` | `21CS002` | `password123` | Sem 5 CSE. Consistent 9+ CGPA across all subjects. |
+| **Student (Average)** | `rohan.verma@college.edu` | `21CS003` | `password123` | Sem 5 CSE. Needs assistance with OS (`CS502`). |
+| **Senior (Mentor - Female)** | `priya.patel@college.edu` | `20CS055` | `password123` | Expert in DBMS (`CS501`) & CN (`CS503`), CGPA 9.35. Available. |
+| **Senior (Mentor - Male)** | `vikram.rao@college.edu` | `20CS088` | `password123` | Expert in OS (`CS502`), CGPA 8.85. Available. |
+| **Senior (At Capacity)** | `sneha.mukherjee@college.edu` | `20CS091` | `password123` | TOC expert (`CS504`), currently at full capacity (2/2 mentees). |
+| **Admin / HOD** | `hod.cse@college.edu` | `ADMIN001` | `password123` | Can import marks and publish official exam timetables. |
 
 ---
 
-## 4. Endpoint Reference
+## 3. Detailed Endpoint Reference
 
 ### 🔑 Authentication Module
 
-#### `POST /api/auth/login`
-- **Access:** Public
-- **Request Body:**
-```json
-{
-  "identifier": "aarav.sharma@college.edu",
-  "password": "password123"
-}
-```
-*(Note: `identifier` accepts either student email address OR college roll number)*
-
-- **Sample Response (200 OK):**
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Login successful",
-  "data": {
-    "user": {
-      "id": "673703bc9f7a1b001a111111",
-      "name": "Aarav Sharma",
-      "rollNumber": "21CS001",
-      "email": "aarav.sharma@college.edu",
-      "role": "Student",
-      "gender": "Male",
-      "branch": "CSE",
-      "year": 3,
-      "currentSemester": 5,
-      "studyPreferences": {
-        "dailyTargetHours": 3,
-        "preferredStudyTimes": ["evening", "night"]
-      }
-    },
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-  }
-}
-```
-
----
-
 #### `POST /api/auth/register`
-- **Access:** Public
+- **Method:** `POST`
+- **Auth:** None (Public)
 - **Request Body:**
 ```json
 {
@@ -130,22 +82,69 @@ Use these ready-to-test accounts created by `npm run seed`:
   }
 }
 ```
+- **Response (`201 Created`):** Returns created user object and JWT bearer token.
 
----
+#### `POST /api/auth/login`
+- **Method:** `POST`
+- **Auth:** None (Public)
+- **Request Body:**
+```json
+{
+  "identifier": "aarav.sharma@college.edu",
+  "password": "password123"
+}
+```
+*(Accepts either student email address OR college roll number in `identifier`)*
+- **Response (`200 OK`):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Login successful",
+  "data": {
+    "user": {
+      "id": "673703bc9f7a1b001a111101",
+      "name": "Aarav Sharma",
+      "rollNumber": "21CS001",
+      "email": "aarav.sharma@college.edu",
+      "role": "Student",
+      "gender": "Male",
+      "branch": "CSE",
+      "currentSemester": 5
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
 
 #### `GET /api/auth/me`
-- **Access:** Private (`Student`, `Senior`, `Admin`)
-- **Headers:** `Authorization: Bearer <token>`
-- Returns logged-in user profile without password.
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- Returns currently logged-in user profile without password.
+
+#### `PUT /api/auth/profile`
+- **Method:** `PUT`
+- **Auth:** Bearer Token
+- **Request Body:**
+```json
+{
+  "phone": "+91 9876543210",
+  "studyPreferences": {
+    "dailyTargetHours": 4,
+    "preferredStudyTimes": ["evening", "night"]
+  }
+}
+```
 
 ---
 
-### 📊 Academic Analytics Module
+### 📊 Academic Performance & Analytics Module
 
 #### `GET /api/student/dashboard`
-- **Access:** Private (`Student`)
-- **Description:** Returns an aggregated payload designed for the frontend Home / Dashboard view (contains student summary, current semester performance, CGPA, weak subject diagnosis, and class benchmarks).
-- **Sample Response (200 OK):**
+- **Method:** `GET`
+- **Auth:** Bearer Token (`Student`)
+- **Description:** Consolidated payload for Home / Dashboard view (contains student summary, current semester performance, CGPA, weak subject diagnostics, and class benchmarks).
+- **Response (`200 OK`):**
 ```json
 {
   "success": true,
@@ -157,466 +156,394 @@ Use these ready-to-test accounts created by `npm run seed`:
       "rollNumber": "21CS001",
       "branch": "CSE",
       "currentSemester": 5,
-      "cgpa": 7.42
-    },
-    "currentSemesterRecord": {
-      "semester": 5,
-      "academicYear": "2023-2024",
-      "totalCredits": 18,
-      "earnedCredits": 18,
-      "sgpa": 7.15,
-      "subjects": [
-        {
-          "subjectCode": "CS501",
-          "subjectName": "Database Management Systems",
-          "credits": 4,
-          "quizMarks": 11,
-          "surpriseTestMarks": 4,
-          "midTermMarks": 10,
-          "endTermMarks": 20,
-          "totalMarks": 45,
-          "percentage": 45,
-          "grade": "C",
-          "gradePoints": 5
-        }
-      ]
-    },
-    "cgpaOverview": {
       "cgpa": 7.42,
-      "totalCredits": 26,
-      "earnedCredits": 26,
-      "completedSemesters": 2,
-      "semesterHistory": [
-        { "semester": 4, "sgpa": 7.75, "totalCredits": 8 },
-        { "semester": 5, "sgpa": 7.15, "totalCredits": 18 }
-      ]
+      "academicStanding": "GOOD_STANDING"
     },
+    "currentSemesterRecord": { ... },
+    "cgpaOverview": { "cgpa": 7.42, "totalCredits": 26, "completedSemesters": 2 },
     "weakSubjectsOverview": {
       "count": 2,
       "summary": "Identified 2 subject(s) requiring focused revision and potential mentorship support.",
-      "subjects": [
-        {
-          "subjectCode": "CS501",
-          "subjectName": "Database Management Systems",
-          "severity": "Critical",
-          "weaknessScore": 75,
-          "suggestMentorship": true
-        }
+      "subjects": [ ... ]
+    },
+    "classBenchmarks": { ... }
+  }
+}
+```
+
+#### `GET /api/student/subjects`
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:**
+  - `semester` (optional, number): Defaults to student's current semester.
+  - `subjectCode` (optional, string): e.g. `CS501`
+- **Description:** Returns detailed assessment breakdown (Quiz, Surprise Test, Mid-Term, End-Term), credits, and letter grades.
+- **Response (`200 OK`):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Subject-wise performance retrieved",
+  "data": {
+    "semester": 5,
+    "sgpa": 7.15,
+    "totalCredits": 18,
+    "subjects": [
+      {
+        "subjectCode": "CS501",
+        "subjectName": "Database Management Systems",
+        "credits": 4,
+        "assessments": {
+          "quiz": { "scored": 11, "max": 20 },
+          "surpriseTest": { "scored": 4, "max": 10 },
+          "midTerm": { "scored": 10, "max": 30 },
+          "endTerm": { "scored": 20, "max": 40 }
+        },
+        "totalMarks": 45,
+        "percentage": 45,
+        "grade": "C-",
+        "gradePoints": 5
+      }
+    ]
+  }
+}
+```
+
+#### `GET /api/student/exam-marks`
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:**
+  - `semester` (optional, number): Filter by semester (e.g. `5`)
+  - `subjectCode` (optional, string): Filter by subject (e.g. `CS501`)
+  - `examType` (optional, string): `Quiz`, `Surprise Test`, `Mid-Term`, or `End-Term`
+- **Description:** Retrieves marks filtered specifically by assessment / examination type.
+- **Response (`200 OK`):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Exam-wise marks retrieved successfully",
+  "data": {
+    "filters": { "semester": 5, "subjectCode": "CS501", "examType": "Mid-Term" },
+    "count": 1,
+    "examMarks": [
+      {
+        "semester": 5,
+        "subjectCode": "CS501",
+        "subjectName": "Database Management Systems",
+        "credits": 4,
+        "totalMarks": 45,
+        "grade": "C-",
+        "gradePoints": 5,
+        "exams": [
+          { "examType": "Mid-Term", "scored": 10, "maxMarks": 30, "percentage": 33.33 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### `GET /api/student/performance`
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:** `semester` (optional), `subjectCode` (optional)
+- **Description:** Returns all historical academic records across semesters.
+
+#### `GET /api/student/comparison`
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:** `semester` (optional)
+- **Description:** Direct comparison between student scores and batch averages, highest scores, lowest scores, and standard deviation.
+
+#### `GET /api/student/analytics`
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:** `semester` (optional)
+- **Description:** **Recharts Frontend Ready.** Directly provides pre-structured arrays for `<BarChart>`, `<LineChart>`, `<RadarChart>` without requiring frontend data munging.
+- **Response (`200 OK`):**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Recharts-ready performance analytics generated successfully",
+  "data": {
+    "semester": 5,
+    "branch": "CSE",
+    "recharts": {
+      "subjectComparisonChart": [
+        { "subjectCode": "CS501", "subjectName": "DBMS", "studentMarks": 45, "classAverage": 70.67, "topperMarks": 98 },
+        { "subjectCode": "CS502", "subjectName": "OS", "studentMarks": 83, "classAverage": 79.67, "topperMarks": 94 }
+      ],
+      "examWiseComparisonChart": [
+        { "examType": "Quiz", "studentScore": 14.8, "classAverage": 16.2, "maxMarks": 20 },
+        { "examType": "Surprise Test", "studentScore": 6.6, "classAverage": 7.8, "maxMarks": 10 },
+        { "examType": "Mid-Term", "studentScore": 19.8, "classAverage": 23.4, "maxMarks": 30 },
+        { "examType": "End-Term", "studentScore": 28.2, "classAverage": 32.6, "maxMarks": 40 }
+      ],
+      "semesterTrendChart": [
+        { "semester": "Sem 4", "semesterNumber": 4, "sgpa": 7.75, "cgpa": 7.75 },
+        { "semester": "Sem 5", "semesterNumber": 5, "sgpa": 7.15, "cgpa": 7.42 }
+      ],
+      "marksDistributionRadar": [
+        { "subjectCode": "CS501", "quizPct": 55, "surprisePct": 40, "midTermPct": 33.3, "endTermPct": 50, "totalPct": 45 }
       ]
     }
   }
 }
 ```
 
----
-
-#### `GET /api/student/subjects?semester=5`
-- **Access:** Private
-- **Query Params:** `semester` (optional, defaults to student's current semester)
-- **Description:** Returns detailed assessment breakdown (Quiz, Surprise Test, Mid-Term, End-Term) and credits for every subject in that semester.
-
----
-
-#### `GET /api/student/performance`
-- **Access:** Private
-- **Description:** Returns all historical semester academic records, SGPAs, earned credits, and overall CGPA.
-
----
-
-#### `GET /api/student/comparison?semester=5`
-- **Access:** Private
-- **Description:** Directly compares student's subject marks with the batch average, highest score, lowest score, and deviation. Perfect for Recharts BarChart and RadarChart visualization!
-- **Sample Response (200 OK):**
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Performance comparison with class generated",
-  "data": {
-    "semester": 5,
-    "branch": "CSE",
-    "comparison": [
-      {
-        "subjectCode": "CS501",
-        "subjectName": "Database Management Systems",
-        "studentMarks": {
-          "quiz": 11,
-          "surpriseTest": 4,
-          "midTerm": 10,
-          "endTerm": 20,
-          "total": 45,
-          "percentage": 45,
-          "grade": "C"
-        },
-        "classBenchmark": {
-          "quiz": 15.0,
-          "surpriseTest": 7.0,
-          "midTerm": 19.67,
-          "endTerm": 29.0,
-          "total": 70.67
-        },
-        "highestClassScore": 98,
-        "lowestClassScore": 45,
-        "marksDifference": -25.67,
-        "status": "Below Average"
-      }
-    ]
-  }
-}
-```
-
----
-
 #### `GET /api/student/cgpa`
-- **Access:** Private
-- **Description:** Returns semester-wise SGPA trajectory and cumulative CGPA. Configurable calculation based on UGC/AICTE credit weightage.
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Description:** Returns semester SGPA trajectory, cumulative CGPA, earned credits, and academic standing.
 
----
+#### `GET /api/student/semester-results`
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:** `semester` (optional)
+- **Description:** Retrieves stored semester results based on the IIIT Raichur ordinance (including backlog count, academic standing: `HONORS_ELIGIBLE`, `GOOD_STANDING`, or `ACADEMIC_PROBATION`, and improvement recommendations).
 
-#### `GET /api/student/weak-subjects?semester=5`
-- **Access:** Private
-- **Description:** Rule-based academic diagnostics engine. Identifies weak areas by analyzing:
-  1. Scores below absolute threshold (e.g. < 55%)
-  2. Scores lagging > 10 marks behind class average
-  3. Negative trends (Quiz % > Surprise Test % > Mid-Term %)
-  4. Specific vulnerable components (e.g. failing Mid-Terms)
-- **Sample Response:**
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Weak subjects analysis completed",
-  "data": {
-    "semester": 5,
-    "totalSubjects": 5,
-    "weakSubjectCount": 2,
-    "weakSubjects": [
-      {
-        "subjectCode": "CS501",
-        "subjectName": "Database Management Systems",
-        "credits": 4,
-        "studentMarks": { "total": 45, "percentage": 45, "grade": "C" },
-        "classAverageTotal": 70.67,
-        "marksGap": 25.67,
-        "severity": "Critical",
-        "weaknessScore": 75,
-        "reasons": [
-          "Total score (45%) is below college proficiency target (55%)",
-          "Performance is 25.67 marks lower than the batch average (70.67)",
-          "Declining performance trajectory detected across Quiz -> Surprise Test -> Mid-Term",
-          "Struggling in Mid-Term exam: scored only 10/30"
-        ],
-        "recommendations": [
-          "Immediate 1-on-1 Senior Mentorship recommended",
-          "Allocate 40% additional daily study planner slots for this subject",
-          "Solve previous 3 years mid-term and end-term question papers"
-        ],
-        "suggestMentorship": true
-      }
-    ]
-  }
-}
-```
+#### `GET /api/student/weak-subjects`
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:** `semester` (optional)
+- **Description:** Multi-factor weak subject identification (percentage cutoff, class average deviation, negative continuous assessment trend, mid-term failure).
 
----
+#### `GET /api/academic/toppers`
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:** `semester` (optional), `branch` (optional)
 
-#### `GET /api/academic/toppers?semester=5&branch=CSE`
-- **Access:** Private
-- **Description:** Retrieves the highest scoring students for each subject in that semester.
+#### `POST /api/academic/import`
+- **Method:** `POST`
+- **Auth:** Bearer Token (`Admin` only)
+- **Request Body:** Array of student semester records `{ records: [...] }`.
 
 ---
 
 ### 🤝 Senior Mentorship Module
 
 #### `GET /api/mentors`
-- **Access:** Private
-- **Query Params:**
-  - `subjectCode`: (e.g. `CS501`)
-  - `femaleOnly`: (`true` or `false`) Optional female-only mentor preference
-  - `branch`: (e.g. `CSE`)
-  - `minCgpa`: (e.g. `8.5`)
-- **Sample Response (200 OK):**
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:**
+  - `subjectCode` (optional): e.g. `CS501`
+  - `femaleOnly` (optional, boolean): `true` to show only female mentors
+  - `branch` (optional): e.g. `CSE`
+  - `minCgpa` (optional, number): e.g. `8.5`
+
+#### `GET /api/mentors/match-weak-subjects`
+- **Method:** `GET`
+- **Auth:** Bearer Token (`Student`)
+- **Query Parameters:** `femaleOnly` (optional, boolean)
+- **Description:** **Smart Mentor Matcher.** Automatically takes the student's identified weak subjects and matches them against senior mentors with verified grade `A+`/`A`/`O` expertise in those subjects.
+- **Response (`200 OK`):**
 ```json
 {
   "success": true,
   "statusCode": 200,
-  "message": "Available senior mentors fetched successfully",
+  "message": "Mentors matched successfully against your weak subjects",
   "data": {
-    "count": 2,
-    "mentors": [
+    "studentWeakSubjects": [
+      { "subjectCode": "CS501", "subjectName": "Database Management Systems", "severity": "Critical", "marksGap": 25.67 }
+    ],
+    "femalePreferenceApplied": false,
+    "count": 1,
+    "matchedMentors": [
       {
         "mentorId": "673703bc9f7a1b001a111120",
         "name": "Priya Patel",
-        "rollNumber": "20CS055",
-        "email": "priya.patel@college.edu",
         "gender": "Female",
-        "branch": "CSE",
-        "year": 4,
         "previousSemCgpa": 9.35,
         "rating": 4.95,
-        "availabilityStatus": true,
-        "availableDays": ["Monday", "Wednesday", "Friday", "Saturday"],
-        "maxMentees": 4,
-        "activeMenteesCount": 1,
         "remainingSlots": 3,
-        "subjectExpertise": [
-          {
-            "subjectCode": "CS501",
-            "subjectName": "Database Management Systems",
-            "gradeAcquired": "O",
-            "proficiencyLevel": "Expert"
-          }
-        ]
+        "matchedWeakSubjects": [
+          { "subjectCode": "CS501", "subjectName": "DBMS", "mentorGrade": "O", "proficiencyLevel": "Expert" }
+        ],
+        "matchScore": 98.2
       }
     ]
   }
 }
 ```
 
----
-
 #### `POST /api/mentorship/request`
-- **Access:** Private (`Student` role only)
-- **Validation Rules:**
-  - Mentor must be registered with role `Senior`.
-  - Mentor must have an active profile with `availabilityStatus: true`.
-  - Mentor must not exceed capacity (`activeMenteesCount < maxMentees`).
-  - If `femaleMentorOnly: true` is chosen, mentor must be `Female`.
-  - Cannot submit duplicate pending requests to the same senior.
+- **Method:** `POST`
+- **Auth:** Bearer Token (`Student`)
 - **Request Body:**
 ```json
 {
   "seniorId": "673703bc9f7a1b001a111120",
   "subjectId": "673703bc9f7a1b001a111101",
   "topic": "Normalization BCNF Proofs & Functional Dependencies",
-  "message": "I lost marks in Mid-Term on 3NF vs BCNF decomposition. Could we schedule a 45 min doubt session?",
-  "femaleMentorOnly": true
+  "message": "Scored low in Mid-Term. Need guidance solving decomposition problems.",
+  "femaleMentorOnly": false
 }
 ```
 
----
+#### `PATCH /api/mentorship/requests/:id/cancel`
+- **Method:** `PATCH`
+- **Auth:** Bearer Token (`Student`)
+- **Description:** Allows a student to cancel a pending mentorship request.
 
 #### `GET /api/mentorship/my-requests`
-- **Access:** Private (`Student` and `Senior`)
-- **Description:**
-  - When called by a Student: returns requests submitted by this student.
-  - When called by a Senior: returns requests received by this mentor.
-
----
+- **Method:** `GET`
+- **Auth:** Bearer Token (`Student` or `Senior`)
+- Returns requests sent (if Student) or received (if Senior).
 
 #### `PUT /api/mentorship/requests/:id/respond`
-- **Access:** Private (`Senior` role only)
+- **Method:** `PUT`
+- **Auth:** Bearer Token (`Senior` only)
 - **Request Body:**
 ```json
 {
   "action": "accepted",
-  "responseNote": "Hi Aarav, happy to help. Let's connect on Google Meet.",
+  "responseNote": "Confirmed! Let us connect on Google Meet on Wednesday at 6 PM.",
   "scheduledTime": "2026-11-18T18:00:00.000Z",
   "meetingLink": "https://meet.google.com/abc-defg-hij"
 }
 ```
-*(Or `"action": "rejected"` with `responseNote` explaining reason)*
 
 ---
 
 ### 📅 Smart Study Planner Module
 
-#### `GET /api/planner?days=7`
-- **Access:** Private (`Student`)
-- **Description:** Generates a transparent, rule-based daily study schedule for the upcoming week based on:
-  - Upcoming exam timetable dates
-  - Incomplete assignments / projects / presentations
-  - Student's weak subjects (automatically receives 1.4x to 1.8x study priority multiplier)
-  - Student's daily available study hours (`dailyTargetHours`, default 3-4 hours)
-- **Sample Response:**
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Smart study plan generated successfully",
-  "data": {
-    "studentSettings": {
-      "dailyAvailableHours": 3,
-      "preferredStudyTimes": ["evening", "night"]
-    },
-    "schedulingLogic": {
-      "engine": "Rule-Based Multi-Factor Priority Engine",
-      "factors": [
-        "Deadline proximity (Exponential scale)",
-        "Task weight (End-Term > Mid-Term > Project > Assignment)",
-        "Weak subject multiplier (Critical 1.8x, Moderate 1.4x)",
-        "Daily target hour budget distribution"
-      ]
-    },
-    "prioritizedQueue": [
-      {
-        "itemType": "task",
-        "category": "ASSIGNMENT",
-        "title": "DBMS Lab Assignment 4: Complex SQL Joins & Views",
-        "subjectCode": "CS501",
-        "priorityScore": 18.2,
-        "priorityBadge": "Urgent",
-        "daysUntilDue": 2,
-        "weaknessMultiplier": 1.8,
-        "weaknessSeverity": "Critical"
-      },
-      {
-        "itemType": "exam",
-        "category": "Exam: END TERM",
-        "title": "Prepare for Database Management Systems (CS501) Exam",
-        "subjectCode": "CS501",
-        "priorityScore": 17.5,
-        "priorityBadge": "Urgent",
-        "daysUntilDue": 4
-      }
-    ],
-    "weeklySchedule": [
-      {
-        "date": "2026-11-15",
-        "day": "Sunday",
-        "targetHours": 3,
-        "totalBlocks": 3,
-        "blocks": [
-          {
-            "blockNumber": 1,
-            "time": "Slot 1 (18:00 - 19:00)",
-            "title": "DBMS Lab Assignment 4: Complex SQL Joins & Views",
-            "category": "ASSIGNMENT",
-            "subjectCode": "CS501",
-            "priorityBadge": "Urgent",
-            "weaknessSeverity": "Critical",
-            "focusGoal": "Focus on fundamental problem sets & previous year exam questions"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+#### `GET /api/planner`
+- **Method:** `GET`
+- **Auth:** Bearer Token (`Student`)
+- **Query Parameters:** `days` (optional, default: 7)
+- **Description:** Generates dynamic weekly schedule combining exam timetables, pending assignments, and weak subject weights (1.4x-1.8x study priority boost).
 
----
+#### `GET /api/planner/recommendations`
+- **Method:** `GET`
+- **Auth:** Bearer Token (`Student`)
+- **Description:** Generates actionable study recommendations based on imminent exams, weak subjects, and approaching assignment deadlines.
 
-#### `PATCH /api/planner/tasks/:id/complete`
-- **Access:** Private (`Student`)
-- **Description:** Marks a task completed, frees up its allocated study blocks, and immediately rebalances and returns the updated weekly study plan.
-
----
-
-#### `GET /api/planner/timetable?semester=5&branch=CSE`
-- **Access:** Private
-- **Description:** Retrieves official exam dates, venues, time slots, and syllabus units.
-
----
-
-### 📝 Tasks & Assignments Module
-
-#### `GET /api/tasks`
-- **Access:** Private
-- **Query Params:**
-  - `status`: `todo`, `in_progress`, `completed`
-  - `type`: `assignment`, `project`, `presentation`, `study`
-  - `subjectCode`: (e.g. `CS501`)
-
----
-
-#### `POST /api/tasks`
-- **Access:** Private (`Student`)
+#### `POST /api/planner/sessions`
+- **Method:** `POST`
+- **Auth:** Bearer Token (`Student`)
+- **Description:** Creates a personalized study session block.
 - **Request Body:**
 ```json
 {
-  "title": "Computer Networks Socket Programming Project",
-  "type": "project",
-  "subjectCode": "CS503",
-  "description": "Build multi-client chat server using TCP sockets in Python or C.",
-  "dueDate": "2026-11-25T23:59:59.000Z",
-  "estimatedHours": 6,
+  "title": "DBMS BCNF Normalization Practice",
+  "subjectCode": "CS501",
+  "scheduledDate": "2026-11-17T00:00:00.000Z",
+  "startTime": "18:00",
+  "endTime": "19:30",
+  "durationMinutes": 90,
+  "topic": "3NF vs BCNF dependency preservation numericals",
+  "goals": ["Solve 5 problems from Korth book", "Summarize 2PL rules"],
+  "isWeakSubjectFocus": true,
+  "priority": "high",
+  "notes": "Bring doubts to Senior Priya session"
+}
+```
+
+#### `GET /api/planner/sessions`
+- **Method:** `GET`
+- **Auth:** Bearer Token (`Student`)
+- **Query Parameters:** `date` (YYYY-MM-DD), `status` (`scheduled`, `completed`), `subjectCode`
+
+#### `PUT /api/planner/sessions/:id`
+- **Method:** `PUT`
+- **Auth:** Bearer Token (`Student`)
+- Update session time, duration, status, or completion.
+
+#### `DELETE /api/planner/sessions/:id`
+- **Method:** `DELETE`
+- **Auth:** Bearer Token (`Student`)
+
+#### `PATCH /api/planner/tasks/:id/complete`
+- **Method:** `PATCH`
+- **Auth:** Bearer Token (`Student`)
+- Marks task completed and immediately returns the refreshed, rebalanced weekly schedule.
+
+#### `GET /api/planner/timetable`
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:** `semester`, `branch`
+
+---
+
+### 📝 Tasks, Assignments & Projects Module
+
+#### `GET /api/tasks`
+- **Method:** `GET`
+- **Auth:** Bearer Token (`Student`)
+- **Query Parameters:**
+  - `type`: `assignment`, `project`, `presentation`, `study`
+  - `status`: `todo`, `in_progress`, `completed`
+  - `submissionStatus`: `pending`, `submitted`, `late_submitted`
+  - `subjectCode`: e.g. `CS501`
+  - `sortBy`: `dueDate`, `priority`, or `createdAt`
+
+#### `POST /api/tasks`
+- **Method:** `POST`
+- **Auth:** Bearer Token (`Student`)
+- **Request Body:**
+```json
+{
+  "title": "OS Semaphore Barrier Implementation",
+  "type": "assignment",
+  "subjectCode": "CS502",
+  "description": "Write a C program to implement a thread barrier using POSIX semaphores.",
+  "dueDate": "2026-11-20T23:59:59.000Z",
+  "estimatedHours": 3,
   "priority": "high"
 }
 ```
 
----
+#### `POST /api/tasks/:id/submit`
+- **Method:** `POST`
+- **Auth:** Bearer Token (`Student`)
+- **Description:** Submit deliverable URL / notes. Automatically calculates if submission was on time or `late_submitted` based on `dueDate`.
+- **Request Body:**
+```json
+{
+  "submissionLink": "https://github.com/student/os-barrier-assignment",
+  "submissionNotes": "Compiled with gcc -pthread. All unit test cases passed."
+}
+```
 
 #### `PUT /api/tasks/:id`
-- **Access:** Private (`Student`)
-- **Description:** Update task title, description, due date, status (`todo`, `in_progress`, `completed`), or priority.
-
----
+- **Method:** `PUT`
+- **Auth:** Bearer Token (`Student`)
+- Update title, description, due date, status, or priority.
 
 #### `DELETE /api/tasks/:id`
-- **Access:** Private (`Student`)
-- **Description:** Deletes task.
+- **Method:** `DELETE`
+- **Auth:** Bearer Token (`Student`)
 
 ---
 
 ### 🔔 Notifications Module
 
 #### `GET /api/notifications`
-- **Access:** Private
-- **Query Params:** `unread=true` (optional)
-- **Description:** Retrieves user notifications for approaching deadlines, exam notices, and mentorship requests.
+- **Method:** `GET`
+- **Auth:** Bearer Token
+- **Query Parameters:** `unread=true`, `type` (`academic`, `deadline`, `mentorship`, `system`)
 
----
-
-#### `PATCH /api/notifications/:id/read`
-- **Access:** Private
-- **Description:** Marks a single notification as read.
-
----
-
-#### `PATCH /api/notifications/read-all`
-- **Access:** Private
-- **Description:** Marks all notifications as read.
-
----
-
-### 📥 Academic Data Import (Admin / Portal Integration)
-
-#### `POST /api/academic/import`
-- **Access:** Private (`Admin` role only)
-- **Description:** Batch ingest academic semester records from authorized CSV/Excel parser or university database.
+#### `POST /api/notifications`
+- **Method:** `POST`
+- **Auth:** Bearer Token
+- Create a self-reminder or academic alert.
 - **Request Body:**
 ```json
 {
-  "records": [
-    {
-      "rollNumber": "21CS001",
-      "semester": 5,
-      "academicYear": "2023-2024",
-      "subjects": [
-        {
-          "subjectCode": "CS501",
-          "subjectName": "Database Management Systems",
-          "credits": 4,
-          "quizMarks": 18,
-          "surpriseTestMarks": 9,
-          "midTermMarks": 26,
-          "endTermMarks": 36
-        }
-      ]
-    }
-  ]
+  "title": "Exam Revision Reminder",
+  "message": "Only 3 days left before DBMS End-Term examination.",
+  "type": "academic"
 }
 ```
 
----
+#### `PATCH /api/notifications/:id/read`
+- **Method:** `PATCH`
+- **Auth:** Bearer Token
+- Marks single notification as read.
 
-## 5. Frontend Integration Tips for React / Vite / Recharts
-
-1. **State Management & Data Fetching:**
-   - Use Axios with an interceptor that automatically attaches `Authorization: Bearer <token>` from `localStorage` or `sessionStorage`.
-   - Setup React Query (`@tanstack/react-query`) for query caching and invalidation on task updates / schedule rebalancing.
-
-2. **Recharts Component Mappings:**
-   - **Student vs Class Average:** Map `/api/student/comparison` directly into a Recharts `<BarChart>` with grouped bars:
-     ```jsx
-     <Bar dataKey="studentMarks.total" fill="#3B82F6" name="My Marks" />
-     <Bar dataKey="classBenchmark.total" fill="#9CA3AF" name="Class Average" />
-     ```
-   - **Semester SGPA Trajectory:** Map `/api/student/cgpa` `semesterHistory` into a `<LineChart>`:
-     ```jsx
-     <Line type="monotone" dataKey="sgpa" stroke="#10B981" name="SGPA" />
-     ```
-   - **Exam-wise Marks Radar:** Map `/api/student/subjects` assessments into a `<RadarChart>` comparing Quiz vs Surprise vs Mid-Term vs End-Term.
-
-3. **Weak Subject Alerts:**
-   - Highlight subjects having `severity === "Critical"` with red badges and provide a direct 1-click **"Request Senior Mentorship"** button pre-filling the mentor request modal with that `subjectCode`!
+#### `PATCH /api/notifications/read-all`
+- **Method:** `PATCH`
+- **Auth:** Bearer Token
+- Marks all user notifications as read.

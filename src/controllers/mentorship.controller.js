@@ -28,6 +28,25 @@ const getMentors = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Match mentors directly against student's identified weak subjects
+ * @route   GET /api/mentors/match-weak-subjects
+ * @access  Private (Student)
+ */
+const matchWeakSubjectMentors = asyncHandler(async (req, res, next) => {
+  const femaleOnly = req.query.femaleOnly === 'true';
+
+  const matches = await MentorshipService.matchMentorsForWeakSubjects(req.user._id, {
+    femaleOnly
+  });
+
+  return ApiResponse.success(
+    res,
+    'Mentors matched successfully against your weak subjects',
+    matches
+  );
+});
+
+/**
  * @desc    Submit a mentorship request to a Senior
  * @route   POST /api/mentorship/request
  * @access  Private (Student)
@@ -51,6 +70,26 @@ const sendMentorshipRequest = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * @desc    Cancel a pending mentorship request
+ * @route   PATCH /api/mentorship/requests/:id/cancel
+ * @access  Private (Student)
+ */
+const cancelMentorshipRequest = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+
+  const cancelledRequest = await MentorshipService.cancelMentorshipRequest(
+    req.user._id,
+    id
+  );
+
+  return ApiResponse.success(
+    res,
+    'Mentorship request cancelled successfully',
+    cancelledRequest
+  );
+});
+
+/**
  * @desc    Get student's own sent mentorship requests
  * @route   GET /api/mentorship/my-requests
  * @access  Private
@@ -59,13 +98,11 @@ const getMyRequests = asyncHandler(async (req, res, next) => {
   let requests;
 
   if (req.user.role === 'Senior') {
-    // Requests received as a mentor
     requests = await MentorshipRequest.find({ senior: req.user._id })
       .populate('student', 'name email rollNumber gender branch currentSemester')
       .populate('subject', 'subjectCode name')
       .sort({ createdAt: -1 });
   } else {
-    // Requests sent as a mentee/student
     requests = await MentorshipRequest.find({ student: req.user._id })
       .populate('senior', 'name email rollNumber gender branch')
       .populate('subject', 'subjectCode name')
@@ -170,7 +207,9 @@ const getMyMentorProfile = asyncHandler(async (req, res, next) => {
 
 module.exports = {
   getMentors,
+  matchWeakSubjectMentors,
   sendMentorshipRequest,
+  cancelMentorshipRequest,
   getMyRequests,
   respondToRequest,
   updateMentorProfile,

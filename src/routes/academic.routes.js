@@ -4,6 +4,9 @@ const {
   getStudentPerformance,
   getStudentDashboard,
   getStudentSubjects,
+  getExamWiseMarks,
+  getPerformanceAnalytics,
+  getSemesterResults,
   getStudentComparison,
   getStudentCgpa,
   getToppers,
@@ -14,15 +17,17 @@ const { getWeakSubjects } = require('../controllers/weakSubject.controller');
 const { protect } = require('../middlewares/auth.middleware');
 const { authorize } = require('../middlewares/role.middleware');
 
-// All academic routes require authentication
 router.use(protect);
 
 // Student Academic Analytics routes
 router.get('/student/dashboard', getStudentDashboard);
 router.get('/student/subjects', getStudentSubjects);
+router.get('/student/exam-marks', getExamWiseMarks);
 router.get('/student/performance', getStudentPerformance);
 router.get('/student/comparison', getStudentComparison);
+router.get('/student/analytics', getPerformanceAnalytics);
 router.get('/student/cgpa', getStudentCgpa);
+router.get('/student/semester-results', getSemesterResults);
 router.get('/student/weak-subjects', getWeakSubjects);
 
 // Batch & Academic Administration routes

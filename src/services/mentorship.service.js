@@ -2,16 +2,12 @@ const SeniorProfile = require('../models/SeniorProfile');
 const MentorshipRequest = require('../models/MentorshipRequest');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const AnalyticsService = require('./analytics.service');
 const ApiError = require('../utils/apiError');
 
 class MentorshipService {
   /**
    * Search and filter eligible Senior Mentors
-   * Supports:
-   * - Subject filter
-   * - Female-only mentor preference
-   * - Availability filter
-   * - Minimum rating or CGPA filter
    */
   static async getAvailableMentors(filters = {}) {
     const {
@@ -22,12 +18,10 @@ class MentorshipService {
       onlyAvailable = true
     } = filters;
 
-    // Build SeniorProfile query
     const profileQuery = {};
 
     if (onlyAvailable) {
       profileQuery.availabilityStatus = true;
-      // Ensure mentor has capacity
       profileQuery.$expr = { $lt: ['$activeMenteesCount', '$maxMentees'] };
     }
 
@@ -39,7 +33,6 @@ class MentorshipService {
       profileQuery['subjectExpertise.subjectCode'] = subjectCode.toUpperCase();
     }
 
-    // Populate user and filter by gender/branch if specified
     const profiles = await SeniorProfile.find(profileQuery)
       .populate({
         path: 'user',
@@ -47,7 +40,6 @@ class MentorshipService {
       })
       .sort({ rating: -1, previousSemCgpa: -1 });
 
-    // Filter by User properties (branch, gender preference)
     const filtered = profiles.filter((p) => {
       if (!p.user) return false;
       if (branch && p.user.branch.toLowerCase() !== branch.toLowerCase()) return false;
@@ -84,32 +76,100 @@ class MentorshipService {
   }
 
   /**
+   * Match available mentors specifically to student's identified weak subjects
+   */
+  static async matchMentorsForWeakSubjects(studentId, options = {}) {
+    const student = await User.findById(studentId);
+    if (!student) throw ApiError.notFound('Student not found');
+
+    const femaleOnly = options.femaleOnly === true || options.femaleOnly === 'true';
+
+    // 1. Identify student's weak subjects in current semester
+    const weakAnalysis = await AnalyticsService.identifyWeakSubjects(
+      studentId,
+      student.currentSemester
+    );
+
+    const weakCodes = weakAnalysis.weakSubjects.map((w) => w.subjectCode.toUpperCase());
+
+    if (weakCodes.length === 0) {
+      return {
+        studentWeakSubjects: [],
+        message: 'No critical weak subjects identified. You may browse all mentors directly.',
+        matchedMentors: []
+      };
+    }
+
+    // 2. Fetch all active mentors with available capacity
+    const availableMentors = await this.getAvailableMentors({
+      branch: student.branch,
+      femaleOnly,
+      onlyAvailable: true
+    });
+
+    // 3. Match mentors who have expertise in these weak subjects
+    const matchedMentors = [];
+
+    availableMentors.forEach((mentor) => {
+      const matchingExpertise = mentor.subjectExpertise.filter((exp) =>
+        weakCodes.includes(exp.subjectCode.toUpperCase())
+      );
+
+      if (matchingExpertise.length > 0) {
+        // Calculate match score: expertise grade weight + rating + CGPA
+        let matchScore = matchingExpertise.length * 30 + mentor.rating * 10 + mentor.previousSemCgpa * 2;
+        
+        matchedMentors.push({
+          ...mentor,
+          matchedWeakSubjects: matchingExpertise.map((exp) => ({
+            subjectCode: exp.subjectCode,
+            subjectName: exp.subjectName,
+            mentorGrade: exp.gradeAcquired,
+            proficiencyLevel: exp.proficiencyLevel
+          })),
+          matchScore: Number(matchScore.toFixed(1))
+        });
+      }
+    });
+
+    // Sort by match score descending
+    matchedMentors.sort((a, b) => b.matchScore - a.matchScore);
+
+    return {
+      studentWeakSubjects: weakAnalysis.weakSubjects.map((w) => ({
+        subjectCode: w.subjectCode,
+        subjectName: w.subjectName,
+        severity: w.severity,
+        marksGap: w.marksGap
+      })),
+      femalePreferenceApplied: femaleOnly,
+      count: matchedMentors.length,
+      matchedMentors
+    };
+  }
+
+  /**
    * Request mentorship from a Senior
-   * Validates eligibility, capacity, availability, and female mentor preference.
    */
   static async createMentorshipRequest(studentId, requestData) {
     const { seniorId, subjectId, topic, message, femaleMentorOnly = false } = requestData;
 
-    // 1. Verify student
     const student = await User.findById(studentId);
     if (!student) {
       throw ApiError.notFound('Student profile not found');
     }
 
-    // 2. Verify senior user & role
     const seniorUser = await User.findById(seniorId);
     if (!seniorUser || seniorUser.role !== 'Senior') {
       throw ApiError.badRequest('The requested mentor is not registered as a Senior');
     }
 
-    // 3. Female-only mentor validation
     if (femaleMentorOnly && seniorUser.gender !== 'Female') {
       throw ApiError.badRequest(
         'Incompatible request: You selected female-only mentor preference, but this mentor is not female'
       );
     }
 
-    // 4. Verify senior profile, capacity, and active availability
     const seniorProfile = await SeniorProfile.findOne({ user: seniorId });
     if (!seniorProfile) {
       throw ApiError.badRequest('Senior mentor has not configured an active mentorship profile');
@@ -127,7 +187,6 @@ class MentorshipService {
       );
     }
 
-    // 5. Check if a pending request already exists
     const existingPending = await MentorshipRequest.findOne({
       student: studentId,
       senior: seniorId,
@@ -140,7 +199,6 @@ class MentorshipService {
       );
     }
 
-    // 6. Create mentorship request
     const newRequest = await MentorshipRequest.create({
       student: studentId,
       senior: seniorId,
@@ -151,7 +209,6 @@ class MentorshipService {
       status: 'pending'
     });
 
-    // 7. Dispatch in-app notification to the Senior
     await Notification.create({
       recipient: seniorId,
       title: 'New Mentorship Request',
@@ -164,6 +221,39 @@ class MentorshipService {
     });
 
     return newRequest;
+  }
+
+  /**
+   * Cancel a pending mentorship request (by Student)
+   */
+  static async cancelMentorshipRequest(studentId, requestId) {
+    const request = await MentorshipRequest.findOne({
+      _id: requestId,
+      student: studentId
+    });
+
+    if (!request) {
+      throw ApiError.notFound('Mentorship request not found');
+    }
+
+    if (request.status !== 'pending') {
+      throw ApiError.badRequest(
+        `Cannot cancel request: status is already '${request.status}'`
+      );
+    }
+
+    request.status = 'cancelled';
+    await request.save();
+
+    await Notification.create({
+      recipient: request.senior,
+      title: 'Mentorship Request Cancelled',
+      message: `A pending mentorship request for "${request.topic}" has been cancelled by the student.`,
+      type: 'mentorship',
+      metaData: { requestId: request._id }
+    });
+
+    return request;
   }
 
   /**
@@ -191,7 +281,6 @@ class MentorshipService {
       throw ApiError.badRequest(`This request has already been ${request.status}`);
     }
 
-    // If accepting, ensure capacity hasn't been exceeded in the interim
     const seniorProfile = await SeniorProfile.findOne({ user: seniorId });
     if (action === 'accepted') {
       if (seniorProfile.activeMenteesCount >= seniorProfile.maxMentees) {
@@ -209,7 +298,6 @@ class MentorshipService {
     if (meetingLink) request.meetingLink = meetingLink;
     await request.save();
 
-    // Notify Student
     await Notification.create({
       recipient: request.student._id,
       title: `Mentorship Request ${action === 'accepted' ? 'Accepted!' : 'Declined'}`,

@@ -1,22 +1,58 @@
 const NotificationService = require('../services/notification.service');
+const Notification = require('../models/Notification');
 const ApiError = require('../utils/apiError');
 const ApiResponse = require('../utils/apiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 
 /**
- * @desc    Get logged in user notifications
+ * @desc    Get logged in user notifications with optional type and unread filters
  * @route   GET /api/notifications
  * @access  Private
  */
 const getNotifications = asyncHandler(async (req, res, next) => {
-  const unreadOnly = req.query.unread === 'true';
-  const notifications = await NotificationService.getUserNotifications(req.user._id, unreadOnly);
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const { unread, type } = req.query;
+
+  const filter = { recipient: req.user._id };
+  if (unread === 'true') filter.isRead = false;
+  if (type) filter.type = type;
+
+  const notifications = await Notification.find(filter).sort({ createdAt: -1 }).limit(50);
+  const unreadCount = await Notification.countDocuments({
+    recipient: req.user._id,
+    isRead: false
+  });
 
   return ApiResponse.success(res, 'Notifications fetched successfully', {
     unreadCount,
+    count: notifications.length,
     notifications
   });
+});
+
+/**
+ * @desc    Create a custom academic reminder or notification
+ * @route   POST /api/notifications
+ * @access  Private
+ */
+const createNotification = asyncHandler(async (req, res, next) => {
+  const { recipientId, title, message, type = 'academic', metaData } = req.body;
+
+  if (!title || !message) {
+    return next(ApiError.badRequest('Please provide title and message'));
+  }
+
+  // If no recipientId passed, defaults to the requesting user (self-reminder)
+  const targetRecipient = recipientId || req.user._id;
+
+  const notification = await Notification.create({
+    recipient: targetRecipient,
+    title,
+    message,
+    type,
+    metaData: metaData || {}
+  });
+
+  return ApiResponse.created(res, 'Notification created successfully', notification);
 });
 
 /**
@@ -47,6 +83,7 @@ const markAllAsRead = asyncHandler(async (req, res, next) => {
 
 module.exports = {
   getNotifications,
+  createNotification,
   markAsRead,
   markAllAsRead
 };

@@ -1,4 +1,5 @@
 const AcademicRecord = require('../models/AcademicRecord');
+const SemesterResult = require('../models/SemesterResult');
 const Subject = require('../models/Subject');
 const User = require('../models/User');
 const AcademicService = require('../services/academic.service');
@@ -15,13 +16,27 @@ const asyncHandler = require('../utils/asyncHandler');
 const getStudentPerformance = asyncHandler(async (req, res, next) => {
   const targetStudentId = req.query.studentId || req.user._id;
   const semester = req.query.semester;
+  const subjectCode = req.query.subjectCode;
 
   const query = { student: targetStudentId };
   if (semester) {
     query.semester = Number(semester);
   }
 
-  const records = await AcademicRecord.find(query).sort({ semester: 1 });
+  let records = await AcademicRecord.find(query).sort({ semester: 1 });
+
+  // Optional subject filter
+  if (subjectCode) {
+    records = records.map((rec) => {
+      const filtered = rec.subjects.filter(
+        (s) => s.subjectCode === subjectCode.toUpperCase()
+      );
+      const copy = rec.toObject();
+      copy.subjects = filtered;
+      return copy;
+    });
+  }
+
   const cgpaData = await AcademicService.calculateStudentCGPA(targetStudentId);
 
   return ApiResponse.success(res, 'Student performance retrieved successfully', {
@@ -29,6 +44,7 @@ const getStudentPerformance = asyncHandler(async (req, res, next) => {
     overallCgpa: cgpaData.cgpa,
     totalCreditsEarned: cgpaData.earnedCredits,
     totalSemestersCompleted: cgpaData.completedSemesters,
+    academicStanding: cgpaData.academicStanding,
     academicRecords: records,
     semesterSummary: cgpaData.semesterHistory
   });
@@ -43,19 +59,13 @@ const getStudentDashboard = asyncHandler(async (req, res, next) => {
   const studentId = req.user._id;
   const currentSemester = req.user.currentSemester;
 
-  // 1. Current semester academic record
   const currentRecord = await AcademicRecord.findOne({
     student: studentId,
     semester: currentSemester
   });
 
-  // 2. CGPA & Historical records
   const cgpaData = await AcademicService.calculateStudentCGPA(studentId);
-
-  // 3. Weak subjects analysis
   const weakSubjects = await AnalyticsService.identifyWeakSubjects(studentId, currentSemester);
-
-  // 4. Batch class averages
   const classAverages = await AnalyticsService.getClassSubjectAverages(
     currentSemester,
     req.user.branch
@@ -67,7 +77,8 @@ const getStudentDashboard = asyncHandler(async (req, res, next) => {
       rollNumber: req.user.rollNumber,
       branch: req.user.branch,
       currentSemester: req.user.currentSemester,
-      cgpa: cgpaData.cgpa
+      cgpa: cgpaData.cgpa,
+      academicStanding: cgpaData.academicStanding
     },
     currentSemesterRecord: currentRecord,
     cgpaOverview: cgpaData,
@@ -88,6 +99,7 @@ const getStudentDashboard = asyncHandler(async (req, res, next) => {
 const getStudentSubjects = asyncHandler(async (req, res, next) => {
   const studentId = req.user._id;
   const semester = Number(req.query.semester) || req.user.currentSemester;
+  const subjectCode = req.query.subjectCode;
 
   const record = await AcademicRecord.findOne({
     student: studentId,
@@ -101,7 +113,12 @@ const getStudentSubjects = asyncHandler(async (req, res, next) => {
     });
   }
 
-  const subjectsWithInsights = record.subjects.map((subj) => ({
+  let subjects = record.subjects;
+  if (subjectCode) {
+    subjects = subjects.filter((s) => s.subjectCode === subjectCode.toUpperCase());
+  }
+
+  const subjectsWithInsights = subjects.map((subj) => ({
     subjectCode: subj.subjectCode,
     subjectName: subj.subjectName,
     credits: subj.credits,
@@ -122,6 +139,70 @@ const getStudentSubjects = asyncHandler(async (req, res, next) => {
     sgpa: record.sgpa,
     totalCredits: record.totalCredits,
     subjects: subjectsWithInsights
+  });
+});
+
+/**
+ * @desc    Get exam-wise marks broken down by assessment type with filters
+ * @route   GET /api/student/exam-marks
+ * @access  Private
+ */
+const getExamWiseMarks = asyncHandler(async (req, res, next) => {
+  const studentId = req.user._id;
+  const { semester, subjectCode, examType } = req.query;
+
+  const examMarks = await AnalyticsService.getExamWiseMarks(studentId, {
+    semester,
+    subjectCode,
+    examType
+  });
+
+  return ApiResponse.success(res, 'Exam-wise marks retrieved successfully', {
+    filters: {
+      semester: semester || 'all',
+      subjectCode: subjectCode || 'all',
+      examType: examType || 'all'
+    },
+    count: examMarks.length,
+    examMarks
+  });
+});
+
+/**
+ * @desc    Get performance analytics structured specifically for Recharts components
+ * @route   GET /api/student/analytics
+ * @access  Private
+ */
+const getPerformanceAnalytics = asyncHandler(async (req, res, next) => {
+  const studentId = req.user._id;
+  const semester = req.query.semester || req.user.currentSemester;
+
+  const analytics = await AnalyticsService.getRechartsAnalyticsData(studentId, semester);
+
+  return ApiResponse.success(
+    res,
+    'Recharts-ready performance analytics generated successfully',
+    analytics
+  );
+});
+
+/**
+ * @desc    Get stored semester results & official standing (IIIT Raichur scale)
+ * @route   GET /api/student/semester-results
+ * @access  Private
+ */
+const getSemesterResults = asyncHandler(async (req, res, next) => {
+  const studentId = req.user._id;
+  const semester = req.query.semester;
+
+  const filter = { student: studentId };
+  if (semester) filter.semester = Number(semester);
+
+  const results = await SemesterResult.find(filter).sort({ semester: 1 });
+
+  return ApiResponse.success(res, 'Semester results retrieved successfully', {
+    count: results.length,
+    results
   });
 });
 
@@ -205,7 +286,7 @@ const getToppers = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * @desc    Batch import academic records (authorized admin or system ingest)
+ * @desc    Batch import academic records
  * @route   POST /api/academic/import
  * @access  Private (Admin)
  */
@@ -216,7 +297,6 @@ const importAcademicRecords = asyncHandler(async (req, res, next) => {
     return next(ApiError.badRequest('Please provide a non-empty array of academic records'));
   }
 
-  // Look up student ObjectId if rollNumber is provided instead of studentId
   const enrichedRecords = [];
   for (const item of records) {
     let studentId = item.studentId;
@@ -287,6 +367,9 @@ module.exports = {
   getStudentPerformance,
   getStudentDashboard,
   getStudentSubjects,
+  getExamWiseMarks,
+  getPerformanceAnalytics,
+  getSemesterResults,
   getStudentComparison,
   getStudentCgpa,
   getToppers,

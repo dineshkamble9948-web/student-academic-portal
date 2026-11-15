@@ -7,7 +7,6 @@ class AnalyticsService {
    * Calculate class statistics for a given semester (and optionally branch)
    */
   static async getClassSubjectAverages(semester, branch = null) {
-    // If branch provided, get roll numbers or student IDs in that branch
     let studentFilter = {};
     if (branch) {
       const students = await User.find({ branch, role: 'Student' }).select('_id');
@@ -135,11 +134,6 @@ class AnalyticsService {
 
   /**
    * Transparent Multi-Factor Weak Subject Identification Engine
-   * Evaluates:
-   * 1. Absolute percentage threshold (e.g. < 55%)
-   * 2. Difference relative to class average (e.g. > 10% lower)
-   * 3. Exam progression trend (Quiz -> Surprise -> Mid-Term)
-   * 4. Vulnerable assessment components
    */
   static async identifyWeakSubjects(studentId, semester) {
     const studentRecord = await AcademicRecord.findOne({
@@ -195,12 +189,10 @@ class AnalyticsService {
       }
 
       // 3. Exam-Wise Performance Trend Analysis
-      // Calculate normalized percentages for each completed exam component
       const quizPct = (subj.quizMarks / maxMarks.quiz) * 100;
       const surprisePct = (subj.surpriseTestMarks / maxMarks.surpriseTest) * 100;
       const midPct = (subj.midTermMarks / maxMarks.midTerm) * 100;
 
-      // Check for declining trend across continuous assessments
       if (quizPct > surprisePct && surprisePct > midPct && (quizPct - midPct) >= 15) {
         reasons.push('Declining performance trajectory detected across Quiz -> Surprise Test -> Mid-Term');
         weaknessPoints += 20;
@@ -228,7 +220,6 @@ class AnalyticsService {
       }
 
       if (requiresIntervention || severity === 'Mild') {
-        // Formulate actionable recommendations
         const recommendations = [];
         if (severity === 'Critical') {
           recommendations.push('Immediate 1-on-1 Senior Mentorship recommended');
@@ -256,7 +247,7 @@ class AnalyticsService {
           },
           classAverageTotal: classAvgTotal,
           marksGap: deviation,
-          severity, // 'Critical' | 'Moderate' | 'Mild'
+          severity,
           weaknessScore: Math.min(100, weaknessPoints),
           reasons,
           recommendations,
@@ -265,7 +256,6 @@ class AnalyticsService {
       }
     });
 
-    // Sort by weakness severity descending
     weakSubjects.sort((a, b) => b.weaknessScore - a.weaknessScore);
 
     return {
@@ -277,6 +267,186 @@ class AnalyticsService {
         weakSubjects.length === 0
           ? 'Great job! Performance is steady across all subjects.'
           : `Identified ${weakSubjects.length} subject(s) requiring focused revision and potential mentorship support.`
+    };
+  }
+
+  /**
+   * Retrieve exam-wise marks broken down by assessment type (Quiz, Surprise Test, Mid-Term, End-Term)
+   */
+  static async getExamWiseMarks(studentId, filters = {}) {
+    const { semester, subjectCode, examType } = filters;
+    const query = { student: studentId };
+    if (semester) query.semester = Number(semester);
+
+    const records = await AcademicRecord.find(query).sort({ semester: 1 });
+    const maxMarks = gradingConfig.assessmentMaxMarks;
+
+    const examBreakdown = [];
+
+    records.forEach((rec) => {
+      rec.subjects.forEach((subj) => {
+        if (subjectCode && subj.subjectCode !== subjectCode.toUpperCase()) {
+          return;
+        }
+
+        const exams = [
+          {
+            examType: 'Quiz',
+            scored: subj.quizMarks,
+            maxMarks: maxMarks.quiz,
+            percentage: Number(((subj.quizMarks / maxMarks.quiz) * 100).toFixed(2))
+          },
+          {
+            examType: 'Surprise Test',
+            scored: subj.surpriseTestMarks,
+            maxMarks: maxMarks.surpriseTest,
+            percentage: Number(((subj.surpriseTestMarks / maxMarks.surpriseTest) * 100).toFixed(2))
+          },
+          {
+            examType: 'Mid-Term',
+            scored: subj.midTermMarks,
+            maxMarks: maxMarks.midTerm,
+            percentage: Number(((subj.midTermMarks / maxMarks.midTerm) * 100).toFixed(2))
+          },
+          {
+            examType: 'End-Term',
+            scored: subj.endTermMarks,
+            maxMarks: maxMarks.endTerm,
+            percentage: Number(((subj.endTermMarks / maxMarks.endTerm) * 100).toFixed(2))
+          }
+        ];
+
+        // Filter by examType if requested (case-insensitive)
+        const filteredExams = examType
+          ? exams.filter((e) => e.examType.toLowerCase().replace(/[\s-]/g, '') === examType.toLowerCase().replace(/[\s-]/g, ''))
+          : exams;
+
+        examBreakdown.push({
+          semester: rec.semester,
+          subjectCode: subj.subjectCode,
+          subjectName: subj.subjectName,
+          credits: subj.credits,
+          totalMarks: subj.totalMarks,
+          grade: subj.grade,
+          gradePoints: subj.gradePoints,
+          exams: filteredExams
+        });
+      });
+    });
+
+    return examBreakdown;
+  }
+
+  /**
+   * Return structured JSON explicitly formatted for Recharts components
+   */
+  static async getRechartsAnalyticsData(studentId, semester) {
+    const student = await User.findById(studentId);
+    const sem = Number(semester) || student.currentSemester;
+
+    // 1. Student record and class statistics
+    const studentRecord = await AcademicRecord.findOne({ student: studentId, semester: sem });
+    const classStats = await this.getClassSubjectAverages(sem, student.branch);
+    const toppers = await this.getSubjectToppers(sem, student.branch);
+    const allRecords = await AcademicRecord.find({ student: studentId }).sort({ semester: 1 });
+
+    const topperMap = {};
+    toppers.forEach((t) => {
+      topperMap[t.subjectCode] = t.highestMarks;
+    });
+
+    // 2. BarChart data: Student vs Class Average vs Top Scorer
+    const subjectComparisonChart = (studentRecord?.subjects || []).map((s) => ({
+      subjectCode: s.subjectCode,
+      subjectName: s.subjectName,
+      studentMarks: s.totalMarks,
+      classAverage: classStats[s.subjectCode]?.classAverage?.total || 0,
+      topperMarks: topperMap[s.subjectCode] || s.totalMarks
+    }));
+
+    // 3. Exam-Wise Performance Breakdown for RadarChart or Grouped BarChart
+    let totalQuiz = 0, totalSurprise = 0, totalMid = 0, totalEnd = 0, subjectCount = studentRecord?.subjects?.length || 1;
+    let classQuiz = 0, classSurprise = 0, classMid = 0, classEnd = 0;
+
+    (studentRecord?.subjects || []).forEach((s) => {
+      totalQuiz += s.quizMarks;
+      totalSurprise += s.surpriseTestMarks;
+      totalMid += s.midTermMarks;
+      totalEnd += s.endTermMarks;
+
+      const cs = classStats[s.subjectCode]?.classAverage;
+      if (cs) {
+        classQuiz += cs.quiz;
+        classSurprise += cs.surpriseTest;
+        classMid += cs.midTerm;
+        classEnd += cs.endTerm;
+      }
+    });
+
+    const examWiseComparisonChart = [
+      {
+        examType: 'Quiz',
+        studentScore: Number((totalQuiz / subjectCount).toFixed(2)),
+        classAverage: Number((classQuiz / subjectCount).toFixed(2)),
+        maxMarks: gradingConfig.assessmentMaxMarks.quiz
+      },
+      {
+        examType: 'Surprise Test',
+        studentScore: Number((totalSurprise / subjectCount).toFixed(2)),
+        classAverage: Number((classSurprise / subjectCount).toFixed(2)),
+        maxMarks: gradingConfig.assessmentMaxMarks.surpriseTest
+      },
+      {
+        examType: 'Mid-Term',
+        studentScore: Number((totalMid / subjectCount).toFixed(2)),
+        classAverage: Number((classMid / subjectCount).toFixed(2)),
+        maxMarks: gradingConfig.assessmentMaxMarks.midTerm
+      },
+      {
+        examType: 'End-Term',
+        studentScore: Number((totalEnd / subjectCount).toFixed(2)),
+        classAverage: Number((classEnd / subjectCount).toFixed(2)),
+        maxMarks: gradingConfig.assessmentMaxMarks.endTerm
+      }
+    ];
+
+    // 4. Semester-Wise Trend Chart (LineChart)
+    let cumulativeCredits = 0;
+    let cumulativePoints = 0;
+    const semesterTrendChart = allRecords.map((r) => {
+      cumulativeCredits += r.totalCredits || 0;
+      cumulativePoints += (r.sgpa || 0) * (r.totalCredits || 0);
+      const runningCgpa = cumulativeCredits > 0 ? Number((cumulativePoints / cumulativeCredits).toFixed(2)) : r.sgpa;
+
+      return {
+        semester: `Sem ${r.semester}`,
+        semesterNumber: r.semester,
+        academicYear: r.academicYear,
+        sgpa: r.sgpa,
+        cgpa: runningCgpa,
+        credits: r.totalCredits
+      };
+    });
+
+    // 5. Radar distribution per subject across all assessments
+    const marksDistributionRadar = (studentRecord?.subjects || []).map((s) => ({
+      subjectCode: s.subjectCode,
+      quizPct: Number(((s.quizMarks / gradingConfig.assessmentMaxMarks.quiz) * 100).toFixed(1)),
+      surprisePct: Number(((s.surpriseTestMarks / gradingConfig.assessmentMaxMarks.surpriseTest) * 100).toFixed(1)),
+      midTermPct: Number(((s.midTermMarks / gradingConfig.assessmentMaxMarks.midTerm) * 100).toFixed(1)),
+      endTermPct: Number(((s.endTermMarks / gradingConfig.assessmentMaxMarks.endTerm) * 100).toFixed(1)),
+      totalPct: s.percentage
+    }));
+
+    return {
+      semester: sem,
+      branch: student.branch,
+      recharts: {
+        subjectComparisonChart,
+        examWiseComparisonChart,
+        semesterTrendChart,
+        marksDistributionRadar
+      }
     };
   }
 }

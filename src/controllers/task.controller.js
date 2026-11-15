@@ -5,7 +5,7 @@ const ApiResponse = require('../utils/apiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 
 /**
- * @desc    Create a new academic task (assignment, project, presentation, study)
+ * @desc    Create a new academic task / assignment / project / presentation
  * @route   POST /api/tasks
  * @access  Private (Student)
  */
@@ -18,11 +18,13 @@ const createTask = asyncHandler(async (req, res, next) => {
     description,
     dueDate,
     estimatedHours,
-    priority
+    priority,
+    projectDeliverables,
+    presentationDate
   } = req.body;
 
   if (!title || !type || !dueDate) {
-    return next(ApiError.badRequest('Please provide title, type, and dueDate'));
+    return next(ApiError.badRequest('Please provide title, type (assignment/project/presentation/study), and dueDate'));
   }
 
   let resolvedSubjectCode = subjectCode || '';
@@ -41,23 +43,27 @@ const createTask = asyncHandler(async (req, res, next) => {
     dueDate: new Date(dueDate),
     estimatedHours: estimatedHours || 2,
     priority: priority || 'medium',
-    status: 'todo'
+    status: 'todo',
+    submissionStatus: 'pending',
+    projectDeliverables: projectDeliverables || [],
+    presentationDate: presentationDate ? new Date(presentationDate) : null
   });
 
-  return ApiResponse.created(res, 'Task created successfully', task);
+  return ApiResponse.created(res, `${type.charAt(0).toUpperCase() + type.slice(1)} created successfully`, task);
 });
 
 /**
- * @desc    Get all tasks for current student with filtering
+ * @desc    Get all tasks for current student with filtering & submission tracking
  * @route   GET /api/tasks
  * @access  Private (Student)
  */
 const getTasks = asyncHandler(async (req, res, next) => {
-  const { type, status, subjectCode, sortBy = 'dueDate' } = req.query;
+  const { type, status, submissionStatus, subjectCode, sortBy = 'dueDate' } = req.query;
 
   const filter = { student: req.user._id };
   if (type) filter.type = type;
   if (status) filter.status = status;
+  if (submissionStatus) filter.submissionStatus = submissionStatus;
   if (subjectCode) filter.subjectCode = subjectCode.toUpperCase();
 
   const sortOption = {};
@@ -69,25 +75,66 @@ const getTasks = asyncHandler(async (req, res, next) => {
     sortOption.createdAt = -1;
   }
 
-  const tasks = await Task.find(filter).sort(sortOption);
+  const tasks = await Task.find(filter).populate('subject', 'subjectCode name credits').sort(sortOption);
 
-  // Group summary for quick frontend stats
+  const now = new Date();
   const summary = {
     total: tasks.length,
-    todo: tasks.filter((t) => t.status === 'todo').length,
-    inProgress: tasks.filter((t) => t.status === 'in_progress').length,
-    completed: tasks.filter((t) => t.status === 'completed').length,
-    overdue: tasks.filter((t) => t.status !== 'completed' && new Date(t.dueDate) < new Date()).length
+    byType: {
+      assignments: tasks.filter((t) => t.type === 'assignment').length,
+      projects: tasks.filter((t) => t.type === 'project').length,
+      presentations: tasks.filter((t) => t.type === 'presentation').length,
+      study: tasks.filter((t) => t.type === 'study').length
+    },
+    byStatus: {
+      todo: tasks.filter((t) => t.status === 'todo').length,
+      inProgress: tasks.filter((t) => t.status === 'in_progress').length,
+      completed: tasks.filter((t) => t.status === 'completed').length,
+      overdue: tasks.filter((t) => t.status !== 'completed' && new Date(t.dueDate) < now).length
+    },
+    bySubmission: {
+      pending: tasks.filter((t) => t.submissionStatus === 'pending').length,
+      submitted: tasks.filter((t) => t.submissionStatus === 'submitted').length
+    }
   };
 
-  return ApiResponse.success(res, 'Tasks retrieved successfully', {
+  return ApiResponse.success(res, 'Academic deliverables retrieved successfully', {
     summary,
     tasks
   });
 });
 
 /**
- * @desc    Update a task (status, dueDate, priority, etc.)
+ * @desc    Submit an assignment or project
+ * @route   POST /api/tasks/:id/submit
+ * @access  Private (Student)
+ */
+const submitTask = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+  const { submissionLink, submissionNotes } = req.body;
+
+  const task = await Task.findOne({ _id: id, student: req.user._id });
+  if (!task) {
+    return next(ApiError.notFound('Task not found'));
+  }
+
+  const now = new Date();
+  const isLate = now > new Date(task.dueDate);
+
+  task.submissionStatus = isLate ? 'late_submitted' : 'submitted';
+  task.submissionDate = now;
+  task.submissionLink = submissionLink || task.submissionLink;
+  task.submissionNotes = submissionNotes || task.submissionNotes;
+  task.status = 'completed';
+  task.completedAt = now;
+
+  await task.save();
+
+  return ApiResponse.success(res, 'Assignment / project submitted successfully', task);
+});
+
+/**
+ * @desc    Update a task (status, dueDate, priority, submissionStatus, etc.)
  * @route   PUT /api/tasks/:id
  * @access  Private (Student)
  */
@@ -100,9 +147,9 @@ const updateTask = asyncHandler(async (req, res, next) => {
     return next(ApiError.notFound('Task not found'));
   }
 
-  // Handle completion status toggle
   if (updates.status === 'completed' && task.status !== 'completed') {
     task.completedAt = new Date();
+    task.submissionStatus = 'submitted';
   } else if (updates.status && updates.status !== 'completed') {
     task.completedAt = null;
   }
@@ -132,6 +179,7 @@ const deleteTask = asyncHandler(async (req, res, next) => {
 module.exports = {
   createTask,
   getTasks,
+  submitTask,
   updateTask,
   deleteTask
 };

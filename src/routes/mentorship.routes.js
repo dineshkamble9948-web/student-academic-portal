@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const {
   getMentors,
+  matchWeakSubjectMentors,
   sendMentorshipRequest,
+  cancelMentorshipRequest,
   getMyRequests,
   respondToRequest,
   updateMentorProfile,
@@ -15,7 +17,9 @@ router.use(protect);
 
 // Student/General Mentorship routes
 router.get('/mentors', getMentors);
+router.get('/mentors/match-weak-subjects', authorize('Student'), matchWeakSubjectMentors);
 router.post('/mentorship/request', authorize('Student'), sendMentorshipRequest);
+router.patch('/mentorship/requests/:id/cancel', authorize('Student'), cancelMentorshipRequest);
 router.get('/mentorship/my-requests', getMyRequests);
 
 // Senior Mentor actions

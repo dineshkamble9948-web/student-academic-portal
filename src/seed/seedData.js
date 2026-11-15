@@ -10,6 +10,8 @@ const MentorshipRequest = require('../models/MentorshipRequest');
 const Task = require('../models/Task');
 const ExamTimetable = require('../models/ExamTimetable');
 const Notification = require('../models/Notification');
+const SemesterResult = require('../models/SemesterResult');
+const StudySession = require('../models/StudySession');
 const AcademicService = require('../services/academic.service');
 
 const seedDatabase = async () => {
@@ -23,9 +25,11 @@ const seedDatabase = async () => {
       User.deleteMany({}),
       Subject.deleteMany({}),
       AcademicRecord.deleteMany({}),
+      SemesterResult.deleteMany({}),
       SeniorProfile.deleteMany({}),
       MentorshipRequest.deleteMany({}),
       Task.deleteMany({}),
+      StudySession.deleteMany({}),
       ExamTimetable.deleteMany({}),
       Notification.deleteMany({})
     ]);
@@ -436,6 +440,40 @@ const seedDatabase = async () => {
         estimatedHours: 2,
         priority: 'medium',
         status: 'todo'
+      }
+    ]);
+
+    console.log('🌱 Seeding Study Sessions...');
+    await StudySession.insertMany([
+      {
+        student: student1._id,
+        title: 'DBMS Normalization & BCNF Decomposition Revision',
+        subject: subjectMap['CS501']._id,
+        subjectCode: 'CS501',
+        scheduledDate: new Date(today.getTime() + 1 * 24 * 60 * 60 * 1000),
+        startTime: '18:00',
+        endTime: '19:30',
+        durationMinutes: 90,
+        topic: 'Lossless join & Dependency preservation proofs',
+        goals: ['Solve 5 textbook numericals on BCNF', 'Review Priya mentor session notes'],
+        isWeakSubjectFocus: true,
+        priority: 'urgent',
+        status: 'scheduled'
+      },
+      {
+        student: student1._id,
+        title: 'Operating Systems Virtual Memory & Paging',
+        subject: subjectMap['CS502']._id,
+        subjectCode: 'CS502',
+        scheduledDate: new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000),
+        startTime: '20:00',
+        endTime: '21:00',
+        durationMinutes: 60,
+        topic: 'TLB miss rates & page fault handling',
+        goals: ['Calculate effective access time with TLB'],
+        isWeakSubjectFocus: false,
+        priority: 'medium',
+        status: 'scheduled'
       }
     ]);
 

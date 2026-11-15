@@ -1,5 +1,6 @@
 const Task = require('../models/Task');
 const ExamTimetable = require('../models/ExamTimetable');
+const StudySession = require('../models/StudySession');
 const User = require('../models/User');
 const AnalyticsService = require('./analytics.service');
 
@@ -76,7 +77,6 @@ class PlannerService {
       }
     }
 
-    // Transparent rule-based formula
     const rawPriority = (urgencyScore * 0.6 + typeWeight * 0.4) * weaknessMultiplier;
     const finalScore = Number(rawPriority.toFixed(2));
 
@@ -107,13 +107,13 @@ class PlannerService {
     const student = await User.findById(studentId);
     const dailyStudyHours = student?.studyPreferences?.dailyTargetHours || 3;
 
-    // 1. Fetch incomplete tasks (assignments, projects, presentations, self-study)
+    // 1. Fetch incomplete tasks
     const tasks = await Task.find({
       student: studentId,
       status: { $ne: 'completed' }
     }).sort({ dueDate: 1 });
 
-    // 2. Fetch upcoming exams for student's branch and semester
+    // 2. Fetch upcoming exams
     const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(now.getDate() + daysAhead + 7);
@@ -124,7 +124,7 @@ class PlannerService {
       examDate: { $gte: now, $lte: futureDate }
     }).sort({ examDate: 1 });
 
-    // 3. Identify weak subjects for targeted revision
+    // 3. Identify weak subjects
     const weakAnalysis = await AnalyticsService.identifyWeakSubjects(
       studentId,
       student.currentSemester
@@ -134,10 +134,9 @@ class PlannerService {
       weakSubjectsMap[w.subjectCode.toUpperCase()] = w;
     });
 
-    // 4. Combine and compute rule-based priorities
+    // 4. Combine and compute priorities
     const queue = [];
 
-    // Push exams
     exams.forEach((exam) => {
       const priorityDetails = this.calculatePriorityScore(exam, weakSubjectsMap);
       queue.push({
@@ -148,14 +147,13 @@ class PlannerService {
         subjectCode: exam.subjectCode,
         subjectName: exam.subjectName,
         targetDate: exam.examDate,
-        estimatedHoursNeeded: 6, // Rule default for exam prep
+        estimatedHoursNeeded: 6,
         hallOrVenue: exam.venue,
         syllabusUnits: exam.syllabusUnits,
         ...priorityDetails
       });
     });
 
-    // Push tasks
     tasks.forEach((task) => {
       const priorityDetails = this.calculatePriorityScore(task, weakSubjectsMap);
       queue.push({
@@ -172,7 +170,6 @@ class PlannerService {
       });
     });
 
-    // Push dedicated revision for Critical weak subjects if no exam or task is already scheduled
     weakAnalysis.weakSubjects
       .filter((w) => w.severity === 'Critical')
       .forEach((weakSub) => {
@@ -199,10 +196,9 @@ class PlannerService {
         }
       });
 
-    // Sort queue by priority score descending
     queue.sort((a, b) => b.priorityScore - a.priorityScore);
 
-    // 5. Construct day-by-day study slots (using Pomodoro 50m study + 10m break slots)
+    // 5. Construct day-by-day study slots
     const dailySchedules = [];
     let queuePointer = 0;
 
@@ -215,7 +211,7 @@ class PlannerService {
       const formattedDate = scheduleDate.toISOString().split('T')[0];
 
       const studyBlocks = [];
-      const slotsPerDay = Math.round(dailyStudyHours); // 1 hour per session block
+      const slotsPerDay = Math.round(dailyStudyHours);
 
       for (let slot = 0; slot < slotsPerDay; slot++) {
         if (queue.length === 0) {
@@ -276,6 +272,77 @@ class PlannerService {
       prioritizedQueue: queue,
       weeklySchedule: dailySchedules,
       totalPendingItems: queue.length
+    };
+  }
+
+  /**
+   * Generate actionable personalized study recommendations
+   */
+  static async getPersonalizedRecommendations(studentId) {
+    const student = await User.findById(studentId);
+    const weakAnalysis = await AnalyticsService.identifyWeakSubjects(
+      studentId,
+      student.currentSemester
+    );
+
+    const now = new Date();
+    const inTwoWeeks = new Date();
+    inTwoWeeks.setDate(now.getDate() + 14);
+
+    const upcomingExams = await ExamTimetable.find({
+      semester: student.currentSemester,
+      branch: student.branch,
+      examDate: { $gte: now, $lte: inTwoWeeks }
+    }).sort({ examDate: 1 });
+
+    const pendingTasks = await Task.find({
+      student: studentId,
+      status: { $ne: 'completed' }
+    }).sort({ dueDate: 1 });
+
+    const recommendations = [];
+
+    // Exam proximity alerts
+    upcomingExams.forEach((exam) => {
+      const days = Math.ceil((new Date(exam.examDate) - now) / (1000 * 60 * 60 * 24));
+      recommendations.push({
+        category: 'EXAM_PREPARATION',
+        priority: days <= 5 ? 'urgent' : 'high',
+        title: `Upcoming ${exam.examType.toUpperCase().replace('_', ' ')} in ${days} day(s)`,
+        message: `${exam.subjectName} (${exam.subjectCode}) exam scheduled on ${new Date(exam.examDate).toLocaleDateString()}. Focus on: ${exam.syllabusUnits.join(', ')}.`,
+        action: 'Schedule daily 90-minute revision block'
+      });
+    });
+
+    // Weak subject recommendations
+    weakAnalysis.weakSubjects.forEach((sub) => {
+      recommendations.push({
+        category: 'WEAK_SUBJECT_FOCUS',
+        priority: sub.severity === 'Critical' ? 'urgent' : 'medium',
+        title: `Academic Focus: ${sub.subjectName} (${sub.subjectCode})`,
+        message: `Currently scored ${sub.studentMarks.percentage}%. Gap with class average: ${sub.marksGap} marks.`,
+        action: sub.suggestMentorship ? 'Connect with a Senior Mentor' : 'Practice previous semester question papers'
+      });
+    });
+
+    // Approaching assignment deadlines
+    pendingTasks.filter((t) => {
+      const days = (new Date(t.dueDate) - now) / (1000 * 60 * 60 * 24);
+      return days <= 3 && days >= 0;
+    }).forEach((task) => {
+      recommendations.push({
+        category: 'ASSIGNMENT_DEADLINE',
+        priority: 'high',
+        title: `Deadline Approaching: ${task.title}`,
+        message: `Due on ${new Date(task.dueDate).toLocaleDateString()}. Estimated effort: ${task.estimatedHours} hour(s).`,
+        action: 'Mark submission in planner'
+      });
+    });
+
+    return {
+      studentId,
+      recommendationCount: recommendations.length,
+      recommendations
     };
   }
 }

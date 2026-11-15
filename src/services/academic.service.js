@@ -1,10 +1,12 @@
 const AcademicRecord = require('../models/AcademicRecord');
+const SemesterResult = require('../models/SemesterResult');
 const Subject = require('../models/Subject');
+const User = require('../models/User');
 const gradingConfig = require('../config/gradingConfig');
 const ApiError = require('../utils/apiError');
 
 /**
- * Service to calculate grades, SGPA, and CGPA
+ * Service to calculate grades, SGPA, CGPA, and persist Semester Results
  */
 class AcademicService {
   /**
@@ -47,6 +49,7 @@ class AcademicService {
 
   /**
    * Compute cumulative CGPA for a student across all completed semesters
+   * and synchronize SemesterResult documents
    */
   static async calculateStudentCGPA(studentId) {
     const allSemesters = await AcademicRecord.find({ student: studentId }).sort({ semester: 1 });
@@ -55,6 +58,9 @@ class AcademicService {
       return {
         cgpa: 0,
         totalCredits: 0,
+        earnedCredits: 0,
+        backlogCount: 0,
+        academicStanding: 'GOOD_STANDING',
         completedSemesters: 0,
         semesterHistory: []
       };
@@ -73,10 +79,65 @@ class AcademicService {
     const totalCredits = semesterHistory.reduce((acc, sem) => acc + (sem.totalCredits || 0), 0);
     const earnedCredits = semesterHistory.reduce((acc, sem) => acc + (sem.earnedCredits || 0), 0);
 
+    // Calculate total backlogs across all semesters
+    let backlogCount = 0;
+    allSemesters.forEach((rec) => {
+      rec.subjects.forEach((s) => {
+        if (s.gradePoints === 0 || s.grade === 'F') {
+          backlogCount += 1;
+        }
+      });
+    });
+
+    const standing = gradingConfig.determineAcademicStanding(cgpa, backlogCount);
+
+    // Persist or update SemesterResult for each semester
+    for (const rec of allSemesters) {
+      const semBacklogs = rec.subjects.filter((s) => s.gradePoints === 0 || s.grade === 'F').length;
+      const weakCodes = rec.subjects.filter((s) => s.percentage < 55).map((s) => s.subjectCode);
+
+      const recommendations = [];
+      if (standing === 'ACADEMIC_PROBATION') {
+        recommendations.push('Mandatory academic counseling and senior mentorship intervention required.');
+      }
+      if (semBacklogs > 0) {
+        recommendations.push(`Clear ${semBacklogs} backlog subject(s) in remedial/supplementary examinations.`);
+      }
+      if (weakCodes.length > 0) {
+        recommendations.push(`Schedule study sessions focusing on weak subject(s): ${weakCodes.join(', ')}.`);
+      }
+      if (recommendations.length === 0) {
+        recommendations.push('Maintain steady study progress and high semester standing.');
+      }
+
+      await SemesterResult.findOneAndUpdate(
+        { student: studentId, semester: rec.semester },
+        {
+          student: studentId,
+          rollNumber: rec.rollNumber,
+          semester: rec.semester,
+          academicYear: rec.academicYear,
+          sgpa: rec.sgpa,
+          cgpa,
+          totalCredits: rec.totalCredits,
+          earnedCredits: rec.earnedCredits,
+          backlogCount: semBacklogs,
+          gradingScheme: gradingConfig.activeScheme,
+          academicStanding: standing,
+          weakSubjectCodes: weakCodes,
+          recommendations
+        },
+        { upsert: true, new: true }
+      );
+    }
+
     return {
       cgpa,
       totalCredits,
       earnedCredits,
+      backlogCount,
+      academicStanding: standing,
+      gradingScheme: gradingConfig.activeScheme,
       completedSemesters: semesterHistory.length,
       semesterHistory
     };
@@ -111,6 +172,9 @@ class AcademicService {
         },
         { upsert: true, new: true, runValidators: true }
       );
+
+      // Trigger CGPA & SemesterResult recalculation for this student
+      await this.calculateStudentCGPA(studentId);
 
       results.push(upserted);
     }
