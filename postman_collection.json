@@ -1,0 +1,537 @@
+{
+  "info": {
+    "name": "Student Academic Analytics & Mentorship API",
+    "_postman_id": "c1f7a4e2-63b8-4d51-92b0-9dfa891a8ef1",
+    "description": "Comprehensive Postman collection covering Authentication, Academic Analytics, Weak Subject Identification, Senior Mentorship, Smart Study Planner, Tasks, and Notifications.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Student Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('token', res.data.token);",
+                  "    console.log('JWT Token saved to collection variable');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"aarav.sharma@college.edu\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Senior Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('token', res.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"priya.patel@college.edu\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Admin Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.token) {",
+                  "    pm.collectionVariables.set('token', res.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"hod.cse@college.edu\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Register Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Deepak Joshi\",\n  \"rollNumber\": \"21CS099\",\n  \"email\": \"deepak.joshi@college.edu\",\n  \"password\": \"password123\",\n  \"role\": \"Student\",\n  \"gender\": \"Male\",\n  \"branch\": \"CSE\",\n  \"year\": 3,\n  \"currentSemester\": 5,\n  \"phone\": \"+91 9123456780\",\n  \"studyPreferences\": {\n    \"dailyTargetHours\": 4,\n    \"preferredStudyTimes\": [\"evening\", \"night\"]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Get Profile (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Academic Performance & Analytics",
+      "item": [
+        {
+          "name": "Student Dashboard Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/student/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["student", "dashboard"]
+            }
+          }
+        },
+        {
+          "name": "Get Subject-Wise Performance",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/student/subjects?semester=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["student", "subjects"],
+              "query": [{ "key": "semester", "value": "5" }]
+            }
+          }
+        },
+        {
+          "name": "Get All Performance & Semester Records",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/student/performance",
+              "host": ["{{baseUrl}}"],
+              "path": ["student", "performance"]
+            }
+          }
+        },
+        {
+          "name": "Student vs Class Average Comparison",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/student/comparison?semester=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["student", "comparison"],
+              "query": [{ "key": "semester", "value": "5" }]
+            }
+          }
+        },
+        {
+          "name": "Get Semester SGPA & CGPA",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/student/cgpa",
+              "host": ["{{baseUrl}}"],
+              "path": ["student", "cgpa"]
+            }
+          }
+        },
+        {
+          "name": "Get Weak Subjects Diagnostic",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/student/weak-subjects?semester=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["student", "weak-subjects"],
+              "query": [{ "key": "semester", "value": "5" }]
+            }
+          }
+        },
+        {
+          "name": "Get Subject Toppers",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/academic/toppers?semester=5&branch=CSE",
+              "host": ["{{baseUrl}}"],
+              "path": ["academic", "toppers"],
+              "query": [
+                { "key": "semester", "value": "5" },
+                { "key": "branch", "value": "CSE" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Senior Mentorship",
+      "item": [
+        {
+          "name": "Get Available Mentors (All)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mentors",
+              "host": ["{{baseUrl}}"],
+              "path": ["mentors"]
+            }
+          }
+        },
+        {
+          "name": "Filter Mentors (Female Only Preference)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mentors?femaleOnly=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["mentors"],
+              "query": [{ "key": "femaleOnly", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Filter Mentors by Subject Code",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mentors?subjectCode=CS501",
+              "host": ["{{baseUrl}}"],
+              "path": ["mentors"],
+              "query": [{ "key": "subjectCode", "value": "CS501" }]
+            }
+          }
+        },
+        {
+          "name": "Send Mentorship Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seniorId\": \"REPLACE_WITH_SENIOR_USER_ID\",\n  \"topic\": \"Concurrency Control and Two-Phase Locking (2PL)\",\n  \"message\": \"I am struggling with conflict serializability and need advice for end-term exams.\",\n  \"femaleMentorOnly\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mentorship/request",
+              "host": ["{{baseUrl}}"],
+              "path": ["mentorship", "request"]
+            }
+          }
+        },
+        {
+          "name": "Get My Mentorship Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/mentorship/my-requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["mentorship", "my-requests"]
+            }
+          }
+        },
+        {
+          "name": "Senior: Respond to Mentorship Request (Accept)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"accepted\",\n  \"responseNote\": \"Session confirmed! Let us meet tomorrow at 6 PM.\",\n  \"meetingLink\": \"https://meet.google.com/xyz-uvw-rst\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mentorship/requests/REPLACE_WITH_REQUEST_ID/respond",
+              "host": ["{{baseUrl}}"],
+              "path": ["mentorship", "requests", "REPLACE_WITH_REQUEST_ID", "respond"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Smart Study Planner",
+      "item": [
+        {
+          "name": "Generate Priority Study Plan",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planner?days=7",
+              "host": ["{{baseUrl}}"],
+              "path": ["planner"],
+              "query": [{ "key": "days", "value": "7" }]
+            }
+          }
+        },
+        {
+          "name": "Get Exam Timetable",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planner/timetable?semester=5&branch=CSE",
+              "host": ["{{baseUrl}}"],
+              "path": ["planner", "timetable"],
+              "query": [
+                { "key": "semester", "value": "5" },
+                { "key": "branch", "value": "CSE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Complete Task and Rebalance Schedule",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planner/tasks/REPLACE_WITH_TASK_ID/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["planner", "tasks", "REPLACE_WITH_TASK_ID", "complete"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Tasks and Assignments",
+      "item": [
+        {
+          "name": "Get Student Tasks",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["tasks"]
+            }
+          }
+        },
+        {
+          "name": "Create Academic Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Operating Systems Lab 5: Semaphore Barrier Implementation\",\n  \"type\": \"assignment\",\n  \"subjectCode\": \"CS502\",\n  \"description\": \"Write C program to implement a synchronization barrier for n threads.\",\n  \"dueDate\": \"2026-11-20T23:59:59.000Z\",\n  \"estimatedHours\": 3,\n  \"priority\": \"high\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["tasks"]
+            }
+          }
+        },
+        {
+          "name": "Update Task Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tasks/REPLACE_WITH_TASK_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["tasks", "REPLACE_WITH_TASK_ID"]
+            }
+          }
+        },
+        {
+          "name": "Delete Task",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tasks/REPLACE_WITH_TASK_ID",
+              "host": ["{{baseUrl}}"],
+              "path": ["tasks", "REPLACE_WITH_TASK_ID"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Notifications",
+      "item": [
+        {
+          "name": "Get User Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications"]
+            }
+          }
+        },
+        {
+          "name": "Mark Single Notification As Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/REPLACE_WITH_NOTIFICATION_ID/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "REPLACE_WITH_NOTIFICATION_ID", "read"]
+            }
+          }
+        },
+        {
+          "name": "Mark All Notifications As Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/read-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "read-all"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
